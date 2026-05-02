@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Arrow Game - Interactive Hover Edition</title>
+    <title>The Arrow Game - Adjustable Scale Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -172,6 +172,14 @@
         document.getElementById('current-round').innerText = roundIdx + 1;
         document.getElementById('round-title').innerText = roundData.title;
 
+        // Automatically calculate Y-axis scaling boundaries that provide padding
+        const allValues = [...roundData.data.filter(v => v !== null), roundData.answer];
+        const minVal = Math.min(...allValues);
+        const maxVal = Math.max(...allValues);
+        const padding = (maxVal - minVal) * 0.3; // Adds 30% spacing at the top/bottom
+        const yMin = Math.max(0, Math.floor(minVal - padding));
+        const yMax = Math.ceil(maxVal + padding);
+
         if (gameChart) gameChart.destroy();
 
         gameChart = new Chart(ctx, {
@@ -209,7 +217,8 @@
                 maintainAspectRatio: false,
                 scales: {
                     y: {
-                        beginAtZero: false
+                        min: yMin,
+                        max: yMax
                     }
                 }
             }
@@ -224,9 +233,11 @@
         const yAxis = chart.scales.y;
         const rect = ctx.canvas.getBoundingClientRect();
         const yPixel = e.clientY - rect.top;
-        const val = yAxis.getValueForPixel(yPixel);
+        let val = yAxis.getValueForPixel(yPixel);
 
-        if (val === undefined || val < yAxis.min || val > yAxis.max) return;
+        // Clamp the value inside the dynamic min/max boundary limits
+        if (val === undefined) return;
+        val = Math.max(yAxis.min, Math.min(yAxis.max, val));
 
         userGuess = Math.round(val);
         const round = rounds[roundIdx];
@@ -247,9 +258,10 @@
         const yAxis = chart.scales.y;
         const rect = ctx.canvas.getBoundingClientRect();
         const yPixel = e.clientY - rect.top;
-        const val = yAxis.getValueForPixel(yPixel);
+        let val = yAxis.getValueForPixel(yPixel);
 
-        if (val !== undefined && val >= yAxis.min && val <= yAxis.max) {
+        if (val !== undefined) {
+            val = Math.max(yAxis.min, Math.min(yAxis.max, val));
             userGuess = Math.round(val);
             const round = rounds[roundIdx];
             const updatedData = [...round.data];
