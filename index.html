@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Arrow Game - Adjustable Scale Edition</title>
+    <title>The Arrow Game - Arrow Head Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -176,7 +176,7 @@
         const allValues = [...roundData.data.filter(v => v !== null), roundData.answer];
         const minVal = Math.min(...allValues);
         const maxVal = Math.max(...allValues);
-        const padding = (maxVal - minVal) * 0.3; // Adds 30% spacing at the top/bottom
+        const padding = (maxVal - minVal) * 0.3;
         const yMin = Math.max(0, Math.floor(minVal - padding));
         const yMax = Math.ceil(maxVal + padding);
 
@@ -197,9 +197,17 @@
                     pointRadius: (ctx) => {
                         const index = ctx.dataIndex;
                         const dataArray = ctx.chart.data.datasets[0].data;
-                        if (index === dataArray.length - 1) return 7;
+                        // Enlarge the arrow-head point slightly
+                        if (index === dataArray.length - 1) return 10;
                         if (index === dataArray.length - 2) return 5;
                         return 3;
+                    },
+                    pointStyle: (ctx) => {
+                        const index = ctx.dataIndex;
+                        const dataArray = ctx.chart.data.datasets[0].data;
+                        // Change point style to triangle for the guessable target
+                        if (index === dataArray.length - 1) return 'triangle';
+                        return 'circle';
                     },
                     pointBackgroundColor: (ctx) => {
                         const index = ctx.dataIndex;
@@ -235,7 +243,6 @@
         const yPixel = e.clientY - rect.top;
         let val = yAxis.getValueForPixel(yPixel);
 
-        // Clamp the value inside the dynamic min/max boundary limits
         if (val === undefined) return;
         val = Math.max(yAxis.min, Math.min(yAxis.max, val));
 
