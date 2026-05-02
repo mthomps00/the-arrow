@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Arrow Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+            max-width: 650px;
+            width: 100%;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-top: 0;
+            font-size: 28px;
+        }
+        .info-box {
+            background: #eef6ff;
+            padding: 15px;
+            border-left: 5px solid #3498db;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .info-box p {
+            margin: 5px 0;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 320px;
+            margin-bottom: 25px;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        label {
+            font-weight: 600;
+            color: #34495e;
+        }
+        .input-with-unit {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        input[type="number"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+            flex: 1;
+        }
+        .unit-badge {
+            background: #ecf0f1;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            color: #7f8c8d;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:active {
+            transform: scale(0.99);
+        }
+        #result-box {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            text-align: center;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎯 The Arrow</h1>
+    
+    <div class="stats">
+        <div>Round: <span id="current-round">1</span> / 3</div>
+        <div>Total Score: <span id="total-score">0</span> pts</div>
+    </div>
+
+    <div class="info-box">
+        <p><strong>Indicator:</strong> <span id="round-title">Loading...</span></p>
+        <p><em>Task:</em> Guess the data point for the most recent year.</p>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="gameChart"></canvas>
+    </div>
+
+    <div class="controls">
+        <div class="input-group">
+            <label for="user-guess">Your Guess:</label>
+            <div class="input-with-unit">
+                <input type="number" id="user-guess" placeholder="Enter number..." />
+                <span class="unit-badge" id="unit-label">Units</span>
+            </div>
+        </div>
+        
+        <button id="action-btn" onclick="handleAction()">Submit Guess</button>
+    </div>
+
+    <div id="result-box"></div>
+</div>
+
+<script>
+    // Game Data
+    const rounds = [
+        {
+            title: "City Homelessness Count",
+            unit: "People",
+            labels: ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022"],
+            data: [1200, 1250, 1300, 1280, 1350, 1400, 1600, 1750],
+            answer: 1900
+        },
+        {
+            title: "Global Renewable Energy Capacity",
+            unit: "GW",
+            labels: ["2018", "2019", "2020", "2021", "2022"],
+            data: [2350, 2580, 2800, 3150, 3400],
+            answer: 3820
+        },
+        {
+            title: "Smartphone Global Shipments",
+            unit: "Millions",
+            labels: ["2019", "2020", "2021", "2022", "2023"],
+            data: [1370, 1290, 1350, 1200, 1170],
+            answer: 1165
+        }
+    ];
+
+    let roundIdx = 0;
+    let score = 0;
+    let gameChart = null;
+    let submitted = false;
+
+    // Initialize Chart
+    const ctx = document.getElementById('gameChart').getContext('2d');
+
+    function loadRound() {
+        if (roundIdx >= rounds.length) {
+            // Game Over State
+            document.querySelector('.container').innerHTML = `
+                <h1 style="text-align:center;">Game Completed! 🎉</h1>
+                <p style="text-align:center; font-size: 18px;">Your final score is: <strong>${score}</strong> / 300 points.</p>
+                <button onclick="location.reload()" style="width: 100%; margin-top:20px;">Play Again</button>
+            `;
+            return;
+        }
+
+        submitted = false;
+        document.getElementById('action-btn').innerText = "Submit Guess";
+        document.getElementById('result-box').style.display = 'none';
+        
+        const roundData = rounds[roundIdx];
+        document.getElementById('current-round').innerText = roundIdx + 1;
+        document.getElementById('round-title').innerText = roundData.title;
+        document.getElementById('unit-label').innerText = roundData.unit;
+        
+        // Prepare chart data (exclude the final answer/hidden value initially)
+        const visibleLabels = [...roundData.labels];
+        const visibleData = [...roundData.data];
+        const nextYear = (parseInt(visibleLabels[visibleLabels.length - 1]) + 1).toString();
+        
+        visibleLabels.push(nextYear);
+        visibleData.push(null); // Keep the actual value hidden
+
+        if (gameChart) gameChart.destroy();
+
+        gameChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: visibleLabels,
+                datasets: [{
+                    label: roundData.title,
+                    data: visibleData,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: (ctx) => {
+                        // Highlight the last available data point
+                        return ctx.dataIndex === visibleData.length - 2 ? 6 : 4;
+                    },
+                    pointBackgroundColor: (ctx) => {
+                        return ctx.dataIndex === visibleData.length - 2 ? '#e74c3c' : '#3498db';
+                    }
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: false
+                    }
+                }
+            }
+        });
+    }
+
+    function handleAction() {
+        if (submitted) {
+            // Proceed to the next round
+            roundIdx++;
+            loadRound();
+        } else {
+            // Submit the guess
+            const inputVal = parseFloat(document.getElementById('user-guess').value);
+            if (isNaN(inputVal)) {
+                alert("Please enter a valid number.");
+                return;
+            }
+
+            submitted = true;
+            document.getElementById('action-btn').innerText = "Next Round";
+
+            const round = rounds[roundIdx];
+            const answer = round.answer;
+            
+            // Calculate score based on distance (closer to 0 is higher points, up to 100)
+            const difference = Math.abs(inputVal - answer);
+            // Example scoring function: 100 - % difference (e.g., if difference <= 5% of target, you get max score, decays with higher distance). 
+            // Simplified: cap at 100 points maximum based on closeness.
+            const roundScore = Math.max(0, Math.floor(100 - (difference / (answer * 0.1)))); 
+            score += roundScore;
+
+            // Update Total Score Display
+            document.getElementById('total-score').innerText = score;
+
+            // Update Chart with Answer
+            const updatedData = [...round.data];
+            updatedData.push(answer);
+            gameChart.data.datasets[0].data = updatedData;
+            gameChart.update();
+
+            // Display Results
+            const resultBox = document.getElementById('result-box');
+            resultBox.style.display = 'block';
+            resultBox.className = 'success';
+            resultBox.innerHTML = `
+                Actual data was: <strong>${answer} ${round.unit}</strong><br>
+                Your difference: <strong>${difference.toFixed(1)}</strong><br>
+                Points Earned: <strong>${roundScore} pts</strong>
+            `;
+            
+            // Clear input for next round
+            document.getElementById('user-guess').value = '';
+        }
+    }
+
+    // Initialize game on load
+    loadRound();
+</script>
+
+</body>
+</html>
