@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Arrow Game - Arrow Head Edition</title>
+    <title>The Arrow Game - Rotated Arrow Head Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -105,7 +105,7 @@
 
     <div class="info-box">
         <p><strong>Indicator:</strong> <span id="round-title">Loading...</span></p>
-        <p><em>Task:</em> Hover over the chart to position the Arrow. <strong>Click once to lock in your guess</strong>, then submit.</p>
+        <p><em>Task:</em> Hover over the chart to position the Arrow. The tip points in your trajectory. <strong>Click once to lock in your guess</strong>, then submit.</p>
     </div>
 
     <div class="chart-container">
@@ -118,6 +118,286 @@
 </div>
 
 <script>
+    // Define custom plugin outside to keep loadRound clean
+    const rotatingPointPlugin = {
+        id: 'rotatingPoint',
+        afterDatasetsDraw(chart, args, options) {
+            if (!userGuess && !submitted) return;
+
+            const { ctx } = chart;
+            const dataset = chart.data.datasets[0];
+            const meta = chart.getDatasetMeta(0);
+            
+            // Indices
+            const lastIndex = dataset.data.length - 1;
+            const prevIndex = lastIndex - 1;
+
+            const currentPoint = meta.data[lastIndex];
+            const previousPoint = meta.data[prevIndex];
+
+            // If Chart.js hasn't fully computed the points yet
+            if (!currentPoint || !previousPoint) return;
+
+            // Step 1: Calculate Angle
+            // Line slope: m = (y2-y1)/(x2-x1)
+            // Note: Canvas coordinates y decreases upwards. 
+            const dy = currentPoint.y - previousPoint.y;
+            const dx = currentPoint.x - previousPoint.x;
+            
+            // Atan2 gives angle in radians from +X axis towards +Y axis.
+            let angle = Math.atan2(dy, dx); 
+
+            // Adjust angle. Our base triangle points UP, which is -Y (or -PI/2)
+            // Chart.js base orientation for triangle seems to be UP by default.
+            // But canvas rotate() is clockwise.
+            const angleAdjustment = Math.PI / 2; // +90 degrees
+
+            // Step 2: Set styling
+            // Define colors dynamically based on game state
+            let fillColor;
+            if (submitted) {
+                fillColor = '#2ecc71'; // Reveal green
+            } else if (isLocked) {
+                fillColor = '#27ae60'; // Locked dark green
+            } else {
+                fillColor = '#e67e22'; // Hovering orange
+            }
+
+            const radius = 10; // Corresponds to pointRadius setting
+
+            // Step 3: Draw rotated triangle manually
+            ctx.save();
+            ctx.translate(currentPoint.x, currentPoint.y); // Move origin to the point
+            ctx.rotate(angle + angleAdjustment); // Rotate (adjusted slope)
+            ctx.fillStyle = fillColor;
+            ctx.strokeStyle = '#fff'; // White border for contrast
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            // Start at the top tip (0, -radius)
+            ctx.moveTo(0, -radius); 
+            // Bottom right
+            ctx.lineTo(radius * 0.8, radius); 
+            // Bottom left
+            ctx.lineTo(-radius * 0.8, radius); 
+            ctx.closePath();
+            
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    };
+
+    Chart.register(rotatingPointPlugin); // Register plugin globally
+
+    const rounds = [
+        {
+            title: "City Homelessness Count",
+            unit: "People",
+            labels: ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023"],
+            data: [1200, 1250, 1300, 1280, 1350, 1400, 1600, 1750, null],
+            answer: 1900
+        },
+        {
+            title: "Global Renewable Energy CapacityThis is a great logical tweak. To make the triangle genuinely act like an "arrow head" leading from the previous point, it needs to rotate based on the angle of the line segment connecting them.
+
+Since Chart.js doesn't natively support data-dependent rotation for points based on line angles, we achieve this by implementing a **Custom Plugin**. This plugin intercepts the drawing process and manually draws the triangular point, applying the correct canvas rotation transformation based on the slope of the trajectory.
+
+Here is the updated code:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Arrow Game - Rotated Arrow Head Edition</title>
+    <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+            max-width: 650px;
+            width: 100%;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-top: 0;
+            font-size: 28px;
+        }
+        .info-box {
+            background: #eef6ff;
+            padding: 15px;
+            border-left: 5px solid #3498db;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .info-box p {
+            margin: 5px 0;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 320px;
+            margin-bottom: 25px;
+        }
+        canvas {
+            cursor: crosshair;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover:not(:disabled) {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        button:active:not(:disabled) {
+            transform: scale(0.99);
+        }
+        #result-box {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            text-align: center;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎯 The Arrow</h1>
+    
+    <div class="stats">
+        <div>Round: <span id="current-round">1</span> / 3</div>
+        <div>Total Score: <span id="total-score">0</span> pts</div>
+    </div>
+
+    <div class="info-box">
+        <p><strong>Indicator:</strong> <span id="round-title">Loading...</span></p>
+        <p><em>Task:</em> Hover over the chart to position the Arrow. The tip points in your trajectory. <strong>Click once to lock in your guess</strong>, then submit.</p>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="gameChart"></canvas>
+    </div>
+
+    <button id="action-btn" onclick="handleAction()" disabled>Submit Guess</button>
+
+    <div id="result-box"></div>
+</div>
+
+<script>
+    // Define custom plugin outside to keep loadRound clean
+    const rotatingPointPlugin = {
+        id: 'rotatingPoint',
+        afterDatasetsDraw(chart, args, options) {
+            if (!userGuess && !submitted) return;
+
+            const { ctx } = chart;
+            const dataset = chart.data.datasets[0];
+            const meta = chart.getDatasetMeta(0);
+            
+            // Indices
+            const lastIndex = dataset.data.length - 1;
+            const prevIndex = lastIndex - 1;
+
+            const currentPoint = meta.data[lastIndex];
+            const previousPoint = meta.data[prevIndex];
+
+            // If Chart.js hasn't fully computed the points yet
+            if (!currentPoint || !previousPoint) return;
+
+            // Step 1: Calculate Angle
+            // Line slope: m = (y2-y1)/(x2-x1)
+            // Note: Canvas coordinates y decreases upwards. 
+            const dy = currentPoint.y - previousPoint.y;
+            const dx = currentPoint.x - previousPoint.x;
+            
+            // Atan2 gives angle in radians from +X axis towards +Y axis.
+            let angle = Math.atan2(dy, dx); 
+
+            // Adjust angle. Our base triangle points UP, which is -Y (or -PI/2)
+            // Chart.js base orientation for triangle seems to be UP by default.
+            // But canvas rotate() is clockwise.
+            const angleAdjustment = Math.PI / 2; // +90 degrees
+
+            // Step 2: Set styling
+            // Define colors dynamically based on game state
+            let fillColor;
+            if (submitted) {
+                fillColor = '#2ecc71'; // Reveal green
+            } else if (isLocked) {
+                fillColor = '#27ae60'; // Locked dark green
+            } else {
+                fillColor = '#e67e22'; // Hovering orange
+            }
+
+            const radius = 10; // Corresponds to pointRadius setting
+
+            // Step 3: Draw rotated triangle manually
+            ctx.save();
+            ctx.translate(currentPoint.x, currentPoint.y); // Move origin to the point
+            ctx.rotate(angle + angleAdjustment); // Rotate (adjusted slope)
+            ctx.fillStyle = fillColor;
+            ctx.strokeStyle = '#fff'; // White border for contrast
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            // Start at the top tip (0, -radius)
+            ctx.moveTo(0, -radius); 
+            // Bottom right
+            ctx.lineTo(radius * 0.8, radius); 
+            // Bottom left
+            ctx.lineTo(-radius * 0.8, radius); 
+            ctx.closePath();
+            
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    };
+
+    Chart.register(rotatingPointPlugin); // Register plugin globally
+
     const rounds = [
         {
             title: "City Homelessness Count",
@@ -194,29 +474,27 @@
                     borderWidth: 3,
                     fill: true,
                     tension: 0.2,
+                    // We define radii, but pointStyle is handled by PLUGIN for the guess point
                     pointRadius: (ctx) => {
                         const index = ctx.dataIndex;
                         const dataArray = ctx.chart.data.datasets[0].data;
-                        // Enlarge the arrow-head point slightly
-                        if (index === dataArray.length - 1) return 10;
+                        if (index === dataArray.length - 1) return 10; // Space reserved for plugin draw
                         if (index === dataArray.length - 2) return 5;
                         return 3;
-                    },
-                    pointStyle: (ctx) => {
-                        const index = ctx.dataIndex;
-                        const dataArray = ctx.chart.data.datasets[0].data;
-                        // Change point style to triangle for the guessable target
-                        if (index === dataArray.length - 1) return 'triangle';
-                        return 'circle';
                     },
                     pointBackgroundColor: (ctx) => {
                         const index = ctx.dataIndex;
                         const dataArray = ctx.chart.data.datasets[0].data;
-                        if (index === dataArray.length - 1) {
-                            return submitted ? '#2ecc71' : (isLocked ? '#27ae60' : '#e67e22');
-                        }
-                        if (index === dataArray.length - 2) return '#e74c3c';
+                        // Hide standard point for guess point, plugin handles it
+                        if (index === dataArray.length - 1) return 'rgba(0,0,0,0)'; 
+                        if (index === dataArray.length - 2) return '#e74c3c'; // red point just before
                         return '#3498db';
+                    },
+                    pointBorderColor: (ctx) => {
+                        const index = ctx.dataIndex;
+                        const dataArray = ctx.chart.data.datasets[0].data;
+                        if (index === dataArray.length - 1) return 'rgba(0,0,0,0)'; // Hide standard point
+                        return '#fff';
                     }
                 }]
             },
@@ -228,6 +506,9 @@
                         min: yMin,
                         max: yMax
                     }
+                },
+                plugins: {
+                    legend: { display: false } // Hide legend to save space
                 }
             }
         });
@@ -252,7 +533,9 @@
         updatedData[updatedData.length - 1] = userGuess;
 
         chart.data.datasets[0].data = updatedData;
-        chart.update('none');
+        
+        // Use 'none' mode for maximum performance during hover
+        chart.update('none'); 
     });
 
     // Toggle lock state on click
@@ -274,30 +557,16 @@
             const updatedData = [...round.data];
             updatedData[updatedData.length - 1] = userGuess;
             chart.data.datasets[0].data = updatedData;
-            chart.update('none');
         }
 
         if (isLocked) {
             document.getElementById('action-btn').disabled = false;
-            chart.data.datasets[0].pointBackgroundColor = (ctx) => {
-                const index = ctx.dataIndex;
-                const dataArray = ctx.chart.data.datasets[0].data;
-                if (index === dataArray.length - 1) return '#27ae60';
-                if (index === dataArray.length - 2) return '#e74c3c';
-                return '#3498db';
-            };
-            chart.update('none');
         } else {
             document.getElementById('action-btn').disabled = true;
-            chart.data.datasets[0].pointBackgroundColor = (ctx) => {
-                const index = ctx.dataIndex;
-                const dataArray = ctx.chart.data.datasets[0].data;
-                if (index === dataArray.length - 1) return '#e67e22';
-                if (index === dataArray.length - 2) return '#e74c3c';
-                return '#3498db';
-            };
-            chart.update('none');
         }
+        
+        // Must update standard chart to force plugin to redraw colors
+        chart.update(); 
     });
 
     function handleAction() {
@@ -329,14 +598,7 @@
             updatedData[updatedData.length - 1] = answer;
             gameChart.data.datasets[0].data = updatedData;
             
-            // Set the final answer point to green
-            gameChart.data.datasets[0].pointBackgroundColor = (ctx) => {
-                const index = ctx.dataIndex;
-                const dataArray = ctx.chart.data.datasets[0].data;
-                if (index === dataArray.length - 1) return '#2ecc71';
-                if (index === dataArray.length - 2) return '#e74c3c';
-                return '#3498db';
-            };
+            // Update chart to reveal final green arrow position
             gameChart.update();
 
             const resultBox = document.getElementById('result-box');
