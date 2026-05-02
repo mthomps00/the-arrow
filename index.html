@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Arrow Game</title>
+    <title>The Arrow Game - Interactive Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -46,38 +46,8 @@
             height: 320px;
             margin-bottom: 25px;
         }
-        .controls {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        label {
-            font-weight: 600;
-            color: #34495e;
-        }
-        .input-with-unit {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        input[type="number"] {
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            font-size: 16px;
-            flex: 1;
-        }
-        .unit-badge {
-            background: #ecf0f1;
-            padding: 10px 12px;
-            border-radius: 6px;
-            font-weight: bold;
-            color: #7f8c8d;
+        canvas {
+            cursor: crosshair;
         }
         button {
             background-color: #3498db;
@@ -89,11 +59,17 @@
             cursor: pointer;
             transition: background 0.3s, transform 0.1s;
             font-weight: bold;
+            width: 100%;
+            margin-top: 10px;
         }
-        button:hover {
+        button:hover:not(:disabled) {
             background-color: #2980b9;
         }
-        button:active {
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        button:active:not(:disabled) {
             transform: scale(0.99);
         }
         #result-box {
@@ -129,50 +105,40 @@
 
     <div class="info-box">
         <p><strong>Indicator:</strong> <span id="round-title">Loading...</span></p>
-        <p><em>Task:</em> Guess the data point for the most recent year.</p>
+        <p><em>Task:</em> <strong>Click directly on the chart area</strong> where you think the final year's data point should be.</p>
     </div>
 
     <div class="chart-container">
         <canvas id="gameChart"></canvas>
     </div>
 
-    <div class="controls">
-        <div class="input-group">
-            <label for="user-guess">Your Guess:</label>
-            <div class="input-with-unit">
-                <input type="number" id="user-guess" placeholder="Enter number..." />
-                <span class="unit-badge" id="unit-label">Units</span>
-            </div>
-        </div>
-        
-        <button id="action-btn" onclick="handleAction()">Submit Guess</button>
-    </div>
+    <button id="action-btn" onclick="handleAction()" disabled>Submit Guess</button>
 
     <div id="result-box"></div>
 </div>
 
 <script>
-    // Game Data
+    // Game Data with Pre-filled 'null' elements
     const rounds = [
         {
             title: "City Homelessness Count",
             unit: "People",
-            labels: ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022"],
-            data: [1200, 1250, 1300, 1280, 1350, 1400, 1600, 1750],
+            labels: ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023"],
+            data: [1200, 1250, 1300, 1280, 1350, 1400, 1600, 1750, null],
             answer: 1900
         },
         {
             title: "Global Renewable Energy Capacity",
             unit: "GW",
-            labels: ["2018", "2019", "2020", "2021", "2022"],
-            data: [2350, 2580, 2800, 3150, 3400],
+            labels: ["2018", "2019", "2020", "2021", "2022", "2023"],
+            data: [2350, 2580, 2800, 3150, 3400, null],
             answer: 3820
         },
         {
             title: "Smartphone Global Shipments",
             unit: "Millions",
-            labels: ["2019", "2020", "2021", "2022", "2023"],
-            data: [1370, 1290, 1350, 1200, 1170],
+            labels: ["2019", "2020", "2021", "2022", "2023", "2024"],
+            data: [1370, 1290, 1350, 1200, 1170, null],
             answer: 1165
         }
     ];
@@ -180,14 +146,13 @@
     let roundIdx = 0;
     let score = 0;
     let gameChart = null;
+    let userGuess = null;
     let submitted = false;
 
-    // Initialize Chart
     const ctx = document.getElementById('gameChart').getContext('2d');
 
     function loadRound() {
         if (roundIdx >= rounds.length) {
-            // Game Over State
             document.querySelector('.container').innerHTML = `
                 <h1 style="text-align:center;">Game Completed! 🎉</h1>
                 <p style="text-align:center; font-size: 18px;">Your final score is: <strong>${score}</strong> / 300 points.</p>
@@ -197,42 +162,46 @@
         }
 
         submitted = false;
+        userGuess = null;
         document.getElementById('action-btn').innerText = "Submit Guess";
+        document.getElementById('action-btn').disabled = true;
         document.getElementById('result-box').style.display = 'none';
         
         const roundData = rounds[roundIdx];
         document.getElementById('current-round').innerText = roundIdx + 1;
         document.getElementById('round-title').innerText = roundData.title;
-        document.getElementById('unit-label').innerText = roundData.unit;
-        
-        // Prepare chart data (exclude the final answer/hidden value initially)
-        const visibleLabels = [...roundData.labels];
-        const visibleData = [...roundData.data];
-        const nextYear = (parseInt(visibleLabels[visibleLabels.length - 1]) + 1).toString();
-        
-        visibleLabels.push(nextYear);
-        visibleData.push(null); // Keep the actual value hidden
 
         if (gameChart) gameChart.destroy();
 
         gameChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: visibleLabels,
+                labels: roundData.labels,
                 datasets: [{
                     label: roundData.title,
-                    data: visibleData,
+                    data: [...roundData.data],
                     borderColor: '#3498db',
                     backgroundColor: 'rgba(52, 152, 219, 0.1)',
                     borderWidth: 3,
                     fill: true,
                     tension: 0.2,
                     pointRadius: (ctx) => {
-                        // Highlight the last available data point
-                        return ctx.dataIndex === visibleData.length - 2 ? 6 : 4;
+                        // Highlights the last available point and user guess point
+                        const index = ctx.dataIndex;
+                        const dataArray = ctx.chart.data.datasets[0].data;
+                        if (index === dataArray.length - 1) return 7;
+                        if (index === dataArray.length - 2) return 5;
+                        return 3;
                     },
                     pointBackgroundColor: (ctx) => {
-                        return ctx.dataIndex === visibleData.length - 2 ? '#e74c3c' : '#3498db';
+                        const index = ctx.dataIndex;
+                        const dataArray = ctx.chart.data.datasets[0].data;
+                        if (index === dataArray.length - 1) {
+                            // Orange when placed, green after submitting
+                            return submitted ? '#2ecc71' : '#e67e22';
+                        }
+                        if (index === dataArray.length - 2) return '#e74c3c'; // red point just before
+                        return '#3498db';
                     }
                 }]
             },
@@ -248,38 +217,61 @@
         });
     }
 
+    // Canvas click event for guessing
+    ctx.canvas.addEventListener('click', (e) => {
+        if (submitted) return;
+
+        const chart = gameChart;
+        const yAxis = chart.scales.y;
+        
+        // Calculate the position using Chart.js API & DOM offsets
+        const rect = ctx.canvas.getBoundingClientRect();
+        const yPixel = e.clientY - rect.top;
+        const val = yAxis.getValueForPixel(yPixel);
+
+        // Don't register clicks if it is outside the chart's visible plot area
+        if (val === undefined || val < yAxis.min || val > yAxis.max) return;
+
+        userGuess = Math.round(val);
+        
+        const round = rounds[roundIdx];
+        const updatedData = [...round.data];
+        updatedData[updatedData.length - 1] = userGuess;
+
+        chart.data.datasets[0].data = updatedData;
+        chart.update('none');
+
+        // Enable submission button
+        document.getElementById('action-btn').disabled = false;
+    });
+
     function handleAction() {
+        const round = rounds[roundIdx];
+
         if (submitted) {
-            // Proceed to the next round
             roundIdx++;
             loadRound();
         } else {
-            // Submit the guess
-            const inputVal = parseFloat(document.getElementById('user-guess').value);
-            if (isNaN(inputVal)) {
-                alert("Please enter a valid number.");
+            if (userGuess === null) {
+                alert("Please click the chart to set your guess first.");
                 return;
             }
 
             submitted = true;
             document.getElementById('action-btn').innerText = "Next Round";
 
-            const round = rounds[roundIdx];
             const answer = round.answer;
             
-            // Calculate score based on distance (closer to 0 is higher points, up to 100)
-            const difference = Math.abs(inputVal - answer);
-            // Example scoring function: 100 - % difference (e.g., if difference <= 5% of target, you get max score, decays with higher distance). 
-            // Simplified: cap at 100 points maximum based on closeness.
-            const roundScore = Math.max(0, Math.floor(100 - (difference / (answer * 0.1)))); 
+            // Calculate distance and determine score based on proximity
+            const difference = Math.abs(userGuess - answer);
+            const roundScore = Math.max(0, Math.floor(100 - (difference / (answer * 0.5)) * 100));
             score += roundScore;
 
-            // Update Total Score Display
+            // Update score counters and chart with the true values
             document.getElementById('total-score').innerText = score;
 
-            // Update Chart with Answer
             const updatedData = [...round.data];
-            updatedData.push(answer);
+            updatedData[updatedData.length - 1] = answer;
             gameChart.data.datasets[0].data = updatedData;
             gameChart.update();
 
@@ -289,16 +281,13 @@
             resultBox.className = 'success';
             resultBox.innerHTML = `
                 Actual data was: <strong>${answer} ${round.unit}</strong><br>
-                Your difference: <strong>${difference.toFixed(1)}</strong><br>
+                Your guess: <strong>${userGuess} ${round.unit}</strong> (Difference: ${difference.toFixed(1)})<br>
                 Points Earned: <strong>${roundScore} pts</strong>
             `;
-            
-            // Clear input for next round
-            document.getElementById('user-guess').value = '';
         }
     }
 
-    // Initialize game on load
+    // Initialize the game
     loadRound();
 </script>
 
