@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Arrow Game - Interactive Edition</title>
+    <title>The Arrow Game - Interactive Hover Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -105,7 +105,7 @@
 
     <div class="info-box">
         <p><strong>Indicator:</strong> <span id="round-title">Loading...</span></p>
-        <p><em>Task:</em> <strong>Click directly on the chart area</strong> where you think the final year's data point should be.</p>
+        <p><em>Task:</em> Hover over the chart to position the Arrow. <strong>Click once to lock in your guess</strong>, then submit.</p>
     </div>
 
     <div class="chart-container">
@@ -118,7 +118,6 @@
 </div>
 
 <script>
-    // Game Data with Pre-filled 'null' elements
     const rounds = [
         {
             title: "City Homelessness Count",
@@ -148,6 +147,7 @@
     let gameChart = null;
     let userGuess = null;
     let submitted = false;
+    let isLocked = false;
 
     const ctx = document.getElementById('gameChart').getContext('2d');
 
@@ -163,6 +163,7 @@
 
         submitted = false;
         userGuess = null;
+        isLocked = false;
         document.getElementById('action-btn').innerText = "Submit Guess";
         document.getElementById('action-btn').disabled = true;
         document.getElementById('result-box').style.display = 'none';
@@ -186,7 +187,6 @@
                     fill: true,
                     tension: 0.2,
                     pointRadius: (ctx) => {
-                        // Highlights the last available point and user guess point
                         const index = ctx.dataIndex;
                         const dataArray = ctx.chart.data.datasets[0].data;
                         if (index === dataArray.length - 1) return 7;
@@ -197,10 +197,9 @@
                         const index = ctx.dataIndex;
                         const dataArray = ctx.chart.data.datasets[0].data;
                         if (index === dataArray.length - 1) {
-                            // Orange when placed, green after submitting
-                            return submitted ? '#2ecc71' : '#e67e22';
+                            return submitted ? '#2ecc71' : (isLocked ? '#27ae60' : '#e67e22');
                         }
-                        if (index === dataArray.length - 2) return '#e74c3c'; // red point just before
+                        if (index === dataArray.length - 2) return '#e74c3c';
                         return '#3498db';
                     }
                 }]
@@ -217,32 +216,69 @@
         });
     }
 
-    // Canvas click event for guessing
-    ctx.canvas.addEventListener('click', (e) => {
-        if (submitted) return;
+    // Track cursor for line and point movement
+    ctx.canvas.addEventListener('mousemove', (e) => {
+        if (submitted || isLocked) return;
 
         const chart = gameChart;
         const yAxis = chart.scales.y;
-        
-        // Calculate the position using Chart.js API & DOM offsets
         const rect = ctx.canvas.getBoundingClientRect();
         const yPixel = e.clientY - rect.top;
         const val = yAxis.getValueForPixel(yPixel);
 
-        // Don't register clicks if it is outside the chart's visible plot area
         if (val === undefined || val < yAxis.min || val > yAxis.max) return;
 
         userGuess = Math.round(val);
-        
         const round = rounds[roundIdx];
         const updatedData = [...round.data];
         updatedData[updatedData.length - 1] = userGuess;
 
         chart.data.datasets[0].data = updatedData;
         chart.update('none');
+    });
 
-        // Enable submission button
-        document.getElementById('action-btn').disabled = false;
+    // Toggle lock state on click
+    ctx.canvas.addEventListener('click', (e) => {
+        if (submitted) return;
+
+        isLocked = !isLocked;
+
+        const chart = gameChart;
+        const yAxis = chart.scales.y;
+        const rect = ctx.canvas.getBoundingClientRect();
+        const yPixel = e.clientY - rect.top;
+        const val = yAxis.getValueForPixel(yPixel);
+
+        if (val !== undefined && val >= yAxis.min && val <= yAxis.max) {
+            userGuess = Math.round(val);
+            const round = rounds[roundIdx];
+            const updatedData = [...round.data];
+            updatedData[updatedData.length - 1] = userGuess;
+            chart.data.datasets[0].data = updatedData;
+            chart.update('none');
+        }
+
+        if (isLocked) {
+            document.getElementById('action-btn').disabled = false;
+            chart.data.datasets[0].pointBackgroundColor = (ctx) => {
+                const index = ctx.dataIndex;
+                const dataArray = ctx.chart.data.datasets[0].data;
+                if (index === dataArray.length - 1) return '#27ae60';
+                if (index === dataArray.length - 2) return '#e74c3c';
+                return '#3498db';
+            };
+            chart.update('none');
+        } else {
+            document.getElementById('action-btn').disabled = true;
+            chart.data.datasets[0].pointBackgroundColor = (ctx) => {
+                const index = ctx.dataIndex;
+                const dataArray = ctx.chart.data.datasets[0].data;
+                if (index === dataArray.length - 1) return '#e67e22';
+                if (index === dataArray.length - 2) return '#e74c3c';
+                return '#3498db';
+            };
+            chart.update('none');
+        }
     });
 
     function handleAction() {
@@ -261,21 +297,29 @@
             document.getElementById('action-btn').innerText = "Next Round";
 
             const answer = round.answer;
-            
-            // Calculate distance and determine score based on proximity
             const difference = Math.abs(userGuess - answer);
+            
+            // Score proximity: Decays based on distance from target
             const roundScore = Math.max(0, Math.floor(100 - (difference / (answer * 0.5)) * 100));
             score += roundScore;
 
-            // Update score counters and chart with the true values
             document.getElementById('total-score').innerText = score;
 
+            // Reveal true data point
             const updatedData = [...round.data];
             updatedData[updatedData.length - 1] = answer;
             gameChart.data.datasets[0].data = updatedData;
+            
+            // Set the final answer point to green
+            gameChart.data.datasets[0].pointBackgroundColor = (ctx) => {
+                const index = ctx.dataIndex;
+                const dataArray = ctx.chart.data.datasets[0].data;
+                if (index === dataArray.length - 1) return '#2ecc71';
+                if (index === dataArray.length - 2) return '#e74c3c';
+                return '#3498db';
+            };
             gameChart.update();
 
-            // Display Results
             const resultBox = document.getElementById('result-box');
             resultBox.style.display = 'block';
             resultBox.className = 'success';
@@ -287,7 +331,7 @@
         }
     }
 
-    // Initialize the game
+    // Initialize game
     loadRound();
 </script>
 
